@@ -1,0 +1,7 @@
+*.root
+*~
+*_pycache_*
+*x509up_u160839
+*mgaisdor.cc
+.vscode/
+test/condor/logs/

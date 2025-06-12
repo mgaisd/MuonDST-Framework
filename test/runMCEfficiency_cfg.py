@@ -59,7 +59,10 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(nEvents) )
 #
 if 'file:' not in options.inputDataset:
     if options.inputDataset!='':
-        listOfFiles = (os.popen("""dasgoclient -query="file dataset=%s instance=prod/phys03" """%(options.inputDataset)).read()).split('\n')
+        redirector = "root://cmsdcache-kit-disk.gridka.de:1094/"
+        files = (os.popen("""xrdfs root://cmsdcache-kit-disk.gridka.de:1094/ ls /store/user/mgaisdor/Run3ScoutingMuonReco/%s"""%(options.inputDataset)).read()).split('\n')
+        #listOfFiles = (os.popen("""dasgoclient -query="file dataset=%s instance=prod/phys03" """%(options.inputDataset)).read()).split('\n')
+        listOfFiles = [redirector + f for f in files if '.root' in f]
     listOfFiles = listOfFiles[options.minFile:options.maxFile]
 else:
     listOfFiles = [options.inputDataset]
