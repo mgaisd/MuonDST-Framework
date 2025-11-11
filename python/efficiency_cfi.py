@@ -8,6 +8,7 @@ efficiencyMC = cms.EDAnalyzer('efficiencyMC',
     #BeamSpot = cms.InputTag("offlineBeamSpot"),
     muonPacker = cms.InputTag("hltScoutingMuonPackerNoVtx", "", "HLTX"),
     svPacker = cms.InputTag("hltScoutingMuonPackerNoVtx", "displacedVtx", "HLTX"),
+    primaryVertexPacker = cms.InputTag("hltScoutingPrimaryVertexPacker", "primaryVtx", "HLTX"),
     generatedParticles = cms.InputTag("genParticles"),
     triggerConfiguration = cms.PSet(
         hltResults            = cms.InputTag('TriggerResults','','HLTX'),

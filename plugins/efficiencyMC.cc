@@ -46,6 +46,7 @@
 #include "TTree.h"
 #include "TH1F.h"
 #include "TH2F.h"
+#include "TProfile.h"
 #include "TFile.h"
 #include "TEfficiency.h"
 
@@ -81,6 +82,9 @@ class efficiencyMC : public edm::one::EDAnalyzer<edm::one::SharedResources>  {
 
       edm::EDGetTokenT<edm::View<Run3ScoutingVertex> > svsToken;
       edm::Handle<edm::View<Run3ScoutingVertex> > svs;
+
+      edm::EDGetTokenT<edm::View<Run3ScoutingVertex> > primaryVerticesToken;
+      edm::Handle<edm::View<Run3ScoutingVertex> > primaryVertices;
 
       //
       // --- Variables
@@ -120,7 +124,9 @@ class efficiencyMC : public edm::one::EDAnalyzer<edm::one::SharedResources>  {
       TH1F* histo_phi_scouting_matched;
       TH1F* histo_lxy_scouting_matched;
 
-      
+      TProfile* histo_pt_resolution;
+      TProfile* histo_pt_resolution_vs_abseta;
+      TProfile* histo_pt_resolution_vs_lxy;      
 
       TEfficiency *reco_efficiency_pt_scouting;
       TEfficiency *reco_efficiency_lxy_scouting;
@@ -129,7 +135,9 @@ class efficiencyMC : public edm::one::EDAnalyzer<edm::one::SharedResources>  {
       TEfficiency *efficiency_minpt_DoubleMuon;
       TEfficiency *efficiency_minlxy_DoubleMuon;
       TEfficiency *efficiency_maxlxy_DoubleMuon;
+      TEfficiency *efficiency_npv_DoubleMuon;
 
+      TH1F *histo_npv;
       TH1F *event_counts;
       TFile *file_out;
 
@@ -170,20 +178,36 @@ efficiencyMC::efficiencyMC(const edm::ParameterSet& iConfig) :
    histo_phi_scouting_matched = new TH1F("histo_phi_scouting_matched", ";Scouting muon #phi (rad); Number of muons", 30, -3.2, 3.2);
    histo_lxy_scouting_matched = new TH1F("histo_lxy_scouting_matched", ";Scouting SV (cm); Number of vertices", 80, 0, 80);
 
+   histo_pt_resolution = new TProfile("histo_pt_resolution",
+					";Generated muon p_{T} (GeV); (p_{T}^{scouting} - p_{T}^{gen}) / p_{T}^{gen}",
+					100, 0, 50);
 
+   histo_pt_resolution_vs_abseta = new TProfile("histo_pt_resolution_vs_abseta",
+					";Generated muon |#eta|; (p_{T}^{scouting} - p_{T}^{gen}) / p_{T}^{gen}",
+					24, 0, 2.4);
+
+   histo_pt_resolution_vs_lxy = new TProfile("histo_pt_resolution_vs_lxy",
+					";Generated muon l_{xy} (cm); (p_{T}^{scouting} - p_{T}^{gen}) / p_{T}^{gen}",
+					80, 0, 80);
+
+   
    reco_efficiency_pt_scouting = new TEfficiency("reco_efficiency_pt_scouting", ";Generated p_{T} (GeV); HLT efficiency", 100, 0, 50);
-   reco_efficiency_lxy_scouting = new TEfficiency("reco_efficiency_lxy_scouting", ";Generated l_{xy} (cm); HLT efficiency", 40, 0, 80);
+   reco_efficiency_lxy_scouting = new TEfficiency("reco_efficiency_lxy_scouting", ";Generated l_{xy} (cm); HLT efficiency", 80, 0, 80);
 
    efficiency_trg_DoubleMuon = new TEfficiency("efficiency_trg_DoubleMuon", "DoubleMuon efficiency; Leading p_{T} (GeV) ; Subleading p_{T} (GeV)", 20, 0, 20, 20, 0, 20);
-   efficiency_minpt_DoubleMuon = new TEfficiency("efficiency_minpt_DoubleMuon", ";Subleading p_{T} (GeV); HLT efficiency", 50, 0, 50);
-   efficiency_minlxy_DoubleMuon = new TEfficiency("efficiency_minlxy_DoubleMuon", ";Generated min l_{xy} (cm); HLT efficiency", 40, 0, 80);
-   efficiency_maxlxy_DoubleMuon = new TEfficiency("efficiency_maxlxy_DoubleMuon", ";Generated max l_{xy} (cm); HLT efficiency", 40, 0, 80);
+   efficiency_minpt_DoubleMuon = new TEfficiency("efficiency_minpt_DoubleMuon", ";Subleading p_{T} (GeV); HLT efficiency", 100, 0, 50);
+   efficiency_minlxy_DoubleMuon = new TEfficiency("efficiency_minlxy_DoubleMuon", ";Generated min l_{xy} (cm); HLT efficiency", 80, 0, 80);
+   efficiency_maxlxy_DoubleMuon = new TEfficiency("efficiency_maxlxy_DoubleMuon", ";Generated max l_{xy} (cm); HLT efficiency", 80, 0, 80);
+   efficiency_npv_DoubleMuon = new TEfficiency("efficiency_npv_DoubleMuon", ";Number of Primary Vertices; HLT efficiency", 50, 0, 50);
+
+   histo_npv = new TH1F("histo_npv", ";Number of Primary Vertices; Number of events", 50, 0, 50);
 
    isData = parameters.getParameter<bool>("isData");
 
    genToken = consumes<edm::View<reco::GenParticle> >  (parameters.getParameter<edm::InputTag>("generatedParticles"));
    muonsToken = consumes<edm::View<Run3ScoutingMuon> >  (parameters.getParameter<edm::InputTag>("muonPacker"));
    svsToken = consumes<edm::View<Run3ScoutingVertex> >  (parameters.getParameter<edm::InputTag>("svPacker"));
+   primaryVerticesToken = consumes<edm::View<Run3ScoutingVertex> >  (parameters.getParameter<edm::InputTag>("primaryVertexPacker"));
 }
 
 
@@ -224,7 +248,6 @@ void efficiencyMC::endJob() {
     histo_lxy_gen_matched->Write();
     histo_pt_vs_lxy_gen->Write();
 
-    std::cout << histo_pt_comp_matched->GetName() << std::endl;
     histo_pt_comp_matched->Write();
 
     histo_pt_scouting->Write();
@@ -237,7 +260,10 @@ void efficiencyMC::endJob() {
     histo_phi_scouting_matched->Write();
     histo_lxy_scouting_matched->Write();
 
-
+    histo_pt_resolution->Write();
+    histo_pt_resolution_vs_abseta->Write();
+    histo_pt_resolution_vs_lxy->Write();
+    
     reco_efficiency_pt_scouting->Write();
     reco_efficiency_lxy_scouting->Write();
 
@@ -245,6 +271,9 @@ void efficiencyMC::endJob() {
     efficiency_minpt_DoubleMuon->Write();
     efficiency_minlxy_DoubleMuon->Write();
     efficiency_maxlxy_DoubleMuon->Write();
+    efficiency_npv_DoubleMuon->Write();
+
+    histo_npv->Write();
 
     file_out->Close();
 }
@@ -265,7 +294,22 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
     bool validMuons = iEvent.getByToken(muonsToken, muons);
     bool validSV = iEvent.getByToken(svsToken, svs);
+    bool validPV = iEvent.getByToken(primaryVerticesToken, primaryVertices);
     iEvent.getByToken(genToken, gens);
+
+    // Count primary vertices
+    int nPrimaryVertices = 0;
+    if (validPV) {
+        nPrimaryVertices = primaryVertices->size();
+        histo_npv->Fill(nPrimaryVertices);
+    }
+
+    // // Debug output
+    // if (validMuons) {
+    //     std::cout << "Event has " << muons->size() << " scouting muons" << std::endl;
+    // } else {
+    //     std::cout << "No valid scouting muons in this event" << std::endl;
+    // }
 
     // Fill histograms
 
@@ -287,6 +331,7 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     std::vector<float> muon_pt;
     std::vector<float> muon_lxy;
     std::vector<unsigned int> matched_scouting;
+    
     for (const auto& gp : *gens) {
         // remove particles outside of the detector range
         if (fabs(gp.eta()) > 2.4)
@@ -359,6 +404,7 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             }
             // Fill efficiency
             if (delR_scouting < 0.1) {
+                //std::cout << "Matched muon found! delR = " << delR_scouting << ", gen_pt = " << gp.pt() << ", scout_pt = " << best_scouting.pt() << std::endl;
                 matched_scouting.push_back(best_idx_scouting);
                 // Fill matched gen muon histograms
                 histo_pt_gen_matched->Fill(gp.pt());
@@ -370,8 +416,14 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
                 histo_pt_scouting_matched->Fill(best_scouting.pt());
                 histo_eta_scouting_matched->Fill(best_scouting.eta());
                 histo_phi_scouting_matched->Fill(best_scouting.phi());
-                //histo_lxy_scouting_matched->Fill(sqrt(best_scouting.vx()*best_scouting.vx() + best_scouting.vy()*best_scouting.vy()));
 
+		// Fill pt resolution histogram
+		float pt_rel_diff = (best_scouting.pt() - gp.pt()) / gp.pt();
+		histo_pt_resolution->Fill(gp.pt(), pt_rel_diff);
+		histo_pt_resolution_vs_abseta->Fill(fabs(gp.eta()), pt_rel_diff);
+		histo_pt_resolution_vs_lxy->Fill(lxy, pt_rel_diff);
+		
+		
                 // Find the vertex associated with the matched scouting muon
                 double lxy_scouting = -1;
                 if (validSV && !best_scouting.vtxIndx().empty()) {
@@ -402,10 +454,10 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             std::sort( std::begin(muon_pt), std::end(muon_pt), [&](int i1, int i2){ return i1 > i2; });
             double minlxy = *std::min_element(muon_lxy.begin(), muon_lxy.end());
             double maxlxy = *std::max_element(muon_lxy.begin(), muon_lxy.end());
-            std::cout << minlxy << " " << maxlxy << std::endl;
+            //std::cout << minlxy << " " << maxlxy << std::endl;
 
             if (triggerCache_.setEvent(iEvent, iSetup)){
-                const auto& vts_dimu(triggerExpression::parse("DST_PFScouting_DoubleMuon_v6"));
+                const auto& vts_dimu(triggerExpression::parse("DST_PFScouting_DoubleMuonNoVtx_v5"));
                 if (vts_dimu){
                     vts_dimu->init(triggerCache_);
                     passDiMuHLT = (*vts_dimu)(triggerCache_);
@@ -414,13 +466,39 @@ void efficiencyMC::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             if (passDiMuHLT) {
                 event_counts->Fill(1); // Fill bin 1 for trigger-passed events
             }
+            
+            // Debug: Print info when trigger fails but we have good reco muons
+            if (!passDiMuHLT && validMuons && muons->size() >= 2) {
+                std::cout << "=== TRIGGER FAILED DEBUG ===" << std::endl;
+                std::cout << "Gen muons: " << muon_pt.size() << " with pt: ";
+                for (float pt : muon_pt) std::cout << pt << " ";
+                std::cout << std::endl;
+                
+                std::cout << "Reco muons: " << muons->size() << " with pt: ";
+                for (const auto& mu : *muons) std::cout << mu.pt() << " ";
+                std::cout << std::endl;
+                
+                // Check if muons meet basic pt requirements
+                int nMuonsAbove3 = 0;
+                int nMuonsAbove5 = 0;
+                for (const auto& mu : *muons) {
+                    if (mu.pt() > 3.0) nMuonsAbove3++;
+                    if (mu.pt() > 5.0) nMuonsAbove5++;
+                }
+                std::cout << "Muons above 3 GeV: " << nMuonsAbove3 << ", above 5 GeV: " << nMuonsAbove5 << std::endl;
+                std::cout << "Min lxy: " << minlxy << ", Max lxy: " << maxlxy << std::endl;
+                std::cout << "============================" << std::endl;
+            }
+            
             efficiency_trg_DoubleMuon->Fill(passDiMuHLT, muon_pt.at(0), muon_pt.at(1));
             efficiency_minpt_DoubleMuon->Fill(passDiMuHLT, muon_pt.at(1));
             efficiency_minlxy_DoubleMuon->Fill(passDiMuHLT, minlxy);
             efficiency_maxlxy_DoubleMuon->Fill(passDiMuHLT, maxlxy);
+            efficiency_npv_DoubleMuon->Fill(passDiMuHLT, nPrimaryVertices);
         }
     }
 
 }
+
 
 DEFINE_FWK_MODULE(efficiencyMC);
